@@ -112,6 +112,16 @@ except:
     print("mediapipe: not installed")
 PY
 
+# Map RunPod secret to HF_TOKEN if not already set. Krea2 (both the original
+# krea/* repos and the Comfy-Org/Krea-2 repackage) sits under Krea's custom
+# community license, which HF treats as gated — you must be logged into an
+# account that's clicked "agree" on the model page, and `hf download` needs
+# HF_TOKEN in the environment to authenticate as that account.
+if [ -z "${HF_TOKEN:-}" ] && [ -n "${RUNPOD_SECRET_HF_TOKEN:-}" ]; then
+  export HF_TOKEN="${RUNPOD_SECRET_HF_TOKEN}"
+  echo "[config] Using RunPod HuggingFace token"
+fi
+
 # Map RunPod secret to CIVITAI_TOKEN if not already set
 if [ -z "${CIVITAI_TOKEN:-}" ] && [ -n "${RUNPOD_SECRET_CivitKey:-}" ]; then
   export CIVITAI_TOKEN="${RUNPOD_SECRET_CivitKey}"
