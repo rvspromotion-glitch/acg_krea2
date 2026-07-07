@@ -227,6 +227,32 @@ hf_snapshot() {
     || echo "[hf] WARNING: snapshot download failed for $repo, continuing"
 }
 
+# Single-file HF download that actually gets the hf_transfer/Xet speed benefit.
+# Plain aria2c/curl hitting a "resolve/main/..." URL only ever does generic
+# HTTP range requests against whatever it gets redirected to -- it can't speak
+# Xet's chunked protocol, so hf_transfer does nothing for it. huggingface-cli
+# does speak it. Use this for anything hosted on huggingface.co; keep the
+# generic download() for everything else (CivitAI, arbitrary URLs, etc).
+hf_download() {
+  local repo="$1"
+  local remote_path="$2"   # e.g. "diffusion_models/krea2_turbo_fp8_scaled.safetensors"
+  local out="$3"
+  if [ -f "$out" ] && [ -s "$out" ]; then
+    echo "[hf] exists: $out"
+    return 0
+  fi
+  echo "[hf] downloading (hf_transfer): ${repo}/${remote_path}"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  if huggingface-cli download "$repo" "$remote_path" --local-dir "$tmp_dir" >/dev/null 2>&1; then
+    mkdir -p "$(dirname "$out")"
+    mv "${tmp_dir}/${remote_path}" "$out"
+  else
+    echo "[hf] WARNING: hf_download failed for ${repo}/${remote_path}"
+  fi
+  rm -rf "$tmp_dir"
+}
+
 safe_pip_install_req() {
   local req="$1"
   [ -f "$req" ] || return 0
@@ -401,17 +427,24 @@ echo "[nodes] All nodes ready!"
 # Download models in parallel
 echo "[models] Downloading models (fully parallel)..."
 
-# Krea2 Turbo — native krea-ai format, single checkpoint file
-download "https://huggingface.co/krea/Krea-2-Turbo/resolve/main/turbo.safetensors" \
-  "${MODELS_DIR}/diffusion_models/krea2_turbo.safetensors" &
+# Krea2 Turbo — using Comfy-Org's repackaged fp8 build, not the original
+# krea/Krea-2-Turbo repo. Two reasons: (1) that original repo is standard
+# git-LFS backed and throttles hard (was seen stuck at CN:7/~4MiB/s despite
+# requesting 16 connections — a server-side cap); (2) it's also the *native*
+# krea-ai layout, which may not load directly in UNETLoader/CLIPLoader/
+# VAELoader — this fp8 build matches the text_encoders/vae files below.
+# Pulled via hf_download (huggingface-cli + hf_transfer) rather than aria2c,
+# since that's the only client that actually speaks Comfy-Org/Krea-2's Xet
+# chunked protocol and gets its real speed benefit.
+hf_download "Comfy-Org/Krea-2" "diffusion_models/krea2_turbo_fp8_scaled.safetensors" \
+  "${MODELS_DIR}/diffusion_models/krea2_turbo_fp8_scaled.safetensors" &
 
-# Krea2 required text encoder (Qwen3VL-4B, fp8 repackaged for ComfyUI's CLIPLoader)
-# and VAE (qwen_image_vae, shared with Anima). Both from Comfy-Org/Krea-2, the
-# repackaged/ComfyUI-native layout — confirmed via Comfy-Org's own workflow docs.
-download "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" \
+# Krea2 required text encoder (Qwen3VL-4B, fp8) and VAE (qwen_image_vae,
+# shared with Anima) — same repo, same reasoning, same client.
+hf_download "Comfy-Org/Krea-2" "text_encoders/qwen3vl_4b_fp8_scaled.safetensors" \
   "${MODELS_DIR}/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" &
 
-download "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors" \
+hf_download "Comfy-Org/Krea-2" "vae/qwen_image_vae.safetensors" \
   "${MODELS_DIR}/vae/qwen_image_vae.safetensors" &
 
 # CivitAI LoRAs (fully parallel alongside the HF downloads above)
