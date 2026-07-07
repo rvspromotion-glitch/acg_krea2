@@ -208,6 +208,12 @@ civit_download() {
 # Multi-file HF repo snapshot (for repos like krea/Krea-2-Raw that ship as
 # transformer/vae/text_encoder/tokenizer subfolders instead of one file).
 # Skips re-downloading if the target dir already has content.
+# hf_transfer does real multi-connection chunked downloads (Rust-based) instead
+# of huggingface_hub's default single-threaded requests download — noticeably
+# faster for big multi-file snapshots on a fat pipe.
+pip install -q hf_transfer --break-system-packages 2>/dev/null || true
+export HF_HUB_ENABLE_HF_TRANSFER=1
+
 hf_snapshot() {
   local repo="$1"
   local out_dir="$2"
@@ -248,80 +254,128 @@ REPO_CACHE="${PERSIST_DIR}/_repos"
 mkdir -p "$REPO_CACHE"
 UPDATE_NODES="${UPDATE_NODES:-0}"
 
-# Clone ALL nodes in parallel (not batches!)
-# NOTE: previously piped `git clone --progress` through `grep -v "Checking out
-# files"`. Git's progress lines are carriage-return (\r) separated, not
-# newline-separated, so grep buffers them until a real \n shows up and dumps a
-# huge wall of concatenated percentages all at once (the garbled
-# "0%...3%...100%, done" single line in your screenshot). It LOOKS frozen for
-# minutes, then "unfreezes" -- but it was progressing the whole time. Fix:
-# stop piping progress through grep, log each clone to its own file instead,
-# and print short status lines. Also add a hard timeout + one retry per repo
-# so a genuinely stalled connection fails fast instead of hanging `wait`.
-echo "[nodes] Cloning custom nodes (fully parallel)..."
+# Clone/fetch ALL nodes in parallel (not batches!)
+# SPEED NOTE: git clone (even --depth 1) still pays for full git protocol
+# negotiation + delta resolution + a git-managed checkout of every file one by
+# one. For vendored code you're not tracking history on, that's pure overhead.
+# GitHub serves plain tarballs of any ref straight from codeload.github.com
+# (already whitelisted in your network config) — one HTTP stream, no git
+# protocol, extracted with tar. This is the single biggest speed win available
+# here, especially for repos with lots of small files (ComfyUI_LayerStyle,
+# ComfyUI-Manager). ComfyUI-Manager is the one exception: it's kept as a real
+# git clone so its own in-app "Update" button still works (it shells out to
+# git and expects a .git dir — a tarball drop would break that one feature).
+echo "[nodes] Fetching custom nodes (fully parallel, tarball where possible)..."
 GIT_CLONE_TIMEOUT="${GIT_CLONE_TIMEOUT:-180}"
 NODE_CLONE_LOG_DIR="${PERSIST_DIR}/.clone-logs"
 mkdir -p "$NODE_CLONE_LOG_DIR"
 
+# pigz gives parallel (multi-core) gzip decompression instead of single-threaded
+# tar -z, which matters once several tarballs extract at the same time.
+if ! command -v pigz >/dev/null 2>&1; then
+  apt-get install -y -qq pigz >/dev/null 2>&1 || true
+fi
+
+tarball_fetch() {
+  local owner_repo="$1"   # e.g. "rgthree/rgthree-comfy"
+  local ref="$2"          # "HEAD" for default branch, or a pinned commit sha
+  local name="$3"
+  local dest="${REPO_CACHE}/${name}"
+  if [ -f "${dest}/.fetched_ok" ]; then
+    echo "[nodes] exists: ${name}"
+    return 0
+  fi
+  echo "[nodes] fetching ${name} (tarball)..."
+  local url="https://codeload.github.com/${owner_repo}/tar.gz/${ref}"
+  local log="${NODE_CLONE_LOG_DIR}/${name}.log"
+  local tmp_tar
+  tmp_tar="$(mktemp --suffix=.tar.gz)"
+  local ok=0
+  for attempt in 1 2; do
+    if command -v aria2c >/dev/null 2>&1; then
+      if timeout "${GIT_CLONE_TIMEOUT}" aria2c -x 8 -s 8 -k 1M \
+           --max-tries=5 --retry-wait=2 --allow-overwrite=true \
+           -d "$(dirname "$tmp_tar")" -o "$(basename "$tmp_tar")" \
+           "$url" > "$log" 2>&1; then
+        ok=1; break
+      fi
+    else
+      if timeout "${GIT_CLONE_TIMEOUT}" curl -L --fail --retry 5 --retry-delay 2 \
+           -o "$tmp_tar" "$url" > "$log" 2>&1; then
+        ok=1; break
+      fi
+    fi
+    echo "[nodes] ${name} attempt ${attempt} failed/timed out (see ${log}), retrying..."
+  done
+  if [ "$ok" != "1" ]; then
+    echo "[nodes] WARNING: ${name} fetch failed after retries, see ${log}"
+    rm -f "$tmp_tar"
+    return 1
+  fi
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  if command -v pigz >/dev/null 2>&1; then
+    tar -I pigz -xf "$tmp_tar" -C "$dest" --strip-components=1 2>>"$log"
+  else
+    tar -xzf "$tmp_tar" -C "$dest" --strip-components=1 2>>"$log"
+  fi
+  rm -f "$tmp_tar"
+  touch "${dest}/.fetched_ok"
+  echo "[nodes] ${name} done"
+}
+
 (
   cd "$REPO_CACHE"
 
+  # name : owner/repo : ref  (ref = "HEAD" for default branch, or a pinned sha)
   for repo in \
-    "ComfyUI-Manager:https://github.com/Comfy-Org/ComfyUI-Manager.git" \
-    "rgthree-comfy:https://github.com/rgthree/rgthree-comfy.git" \
-    "ComfyUI-Easy-Use:https://github.com/yolain/ComfyUI-Easy-Use.git" \
-    "ComfyUI_LayerStyle:https://github.com/chflame163/ComfyUI_LayerStyle.git" \
-    "ComfyUI-SeedVR2_VideoUpscaler:https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler.git" \
-    "ComfyUI-GridSplit:https://github.com/workordie/ComfyUI-GridSplit.git" \
-    "BatchnodeI9:https://github.com/rvspromotion-glitch/BatchnodeI9.git" \
-    "savezipi9:https://github.com/rvspromotion-glitch/savezipi9.git"
+    "rgthree-comfy:rgthree/rgthree-comfy:HEAD" \
+    "ComfyUI-Easy-Use:yolain/ComfyUI-Easy-Use:HEAD" \
+    "ComfyUI_LayerStyle:chflame163/ComfyUI_LayerStyle:HEAD" \
+    "ComfyUI-SeedVR2_VideoUpscaler:numz/ComfyUI-SeedVR2_VideoUpscaler:HEAD" \
+    "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
+    "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
+    "savezipi9:rvspromotion-glitch/savezipi9:HEAD"
   do
     name="${repo%%:*}"
-    url="${repo#*:}"
-    (
-      if [ ! -d "${name}/.git" ]; then
-        echo "[nodes] cloning ${name}..."
-        log="${NODE_CLONE_LOG_DIR}/${name}.log"
-        ok=0
-        for attempt in 1 2; do
-          if GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true \
-             GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30 \
-             timeout "${GIT_CLONE_TIMEOUT}" git \
-               -c http.extraHeader= \
-               -c credential.helper= \
-               -c core.askPass= \
-               clone --depth 1 --single-branch --no-tags -q "$url" "$name" \
-               > "$log" 2>&1; then
-            ok=1
-            break
-          fi
-          echo "[nodes] ${name} attempt ${attempt} failed/timed out (see ${log}), retrying..."
-          rm -rf "${name}"
-        done
-        if [ "$ok" = "1" ]; then
-          echo "[nodes] ${name} done"
-        else
-          echo "[nodes] WARNING: ${name} failed after retries, see ${log}"
-        fi
-      elif [ "$UPDATE_NODES" = "1" ]; then
-        echo "[nodes] updating ${name}..."
-        git -C "$name" pull --rebase 2>/dev/null || true
-      fi
-    ) &
+    rest="${repo#*:}"
+    owner_repo="${rest%%:*}"
+    ref="${rest#*:}"
+    ( tarball_fetch "$owner_repo" "$ref" "$name" ) &
   done
-  wait
 
-  # ComfyUI-GridSplit: workflow was built against a specific commit, pin it
-  if [ -d "ComfyUI-GridSplit/.git" ]; then
-    (
-      cd ComfyUI-GridSplit
-      if ! git cat-file -e b9941964ff879487aa3e9433b174548039748453 2>/dev/null; then
-        git fetch --depth 1 origin b9941964ff879487aa3e9433b174548039748453 2>/dev/null || true
+  # ComfyUI-Manager stays a real git clone so its own in-app updater keeps working
+  (
+    name="ComfyUI-Manager"
+    url="https://github.com/Comfy-Org/ComfyUI-Manager.git"
+    if [ ! -d "${name}/.git" ]; then
+      echo "[nodes] cloning ${name}..."
+      log="${NODE_CLONE_LOG_DIR}/${name}.log"
+      ok=0
+      for attempt in 1 2; do
+        if GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true \
+           GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30 \
+           timeout "${GIT_CLONE_TIMEOUT}" git \
+             -c http.extraHeader= -c credential.helper= -c core.askPass= \
+             clone --depth 1 --single-branch --no-tags -q "$url" "$name" \
+             > "$log" 2>&1; then
+          ok=1; break
+        fi
+        echo "[nodes] ${name} attempt ${attempt} failed/timed out (see ${log}), retrying..."
+        rm -rf "${name}"
+      done
+      if [ "$ok" = "1" ]; then
+        echo "[nodes] ${name} done"
+      else
+        echo "[nodes] WARNING: ${name} failed after retries, see ${log}"
       fi
-      git checkout -q b9941964ff879487aa3e9433b174548039748453 2>/dev/null \
-        || echo "[nodes] WARNING: could not pin ComfyUI-GridSplit to expected commit, using latest"
-    )
-  fi
+    elif [ "$UPDATE_NODES" = "1" ]; then
+      echo "[nodes] updating ${name}..."
+      git -C "$name" pull --rebase 2>/dev/null || true
+    fi
+  ) &
+
+  wait
 )
 
 echo "[nodes] Creating symlinks..."
