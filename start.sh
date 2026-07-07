@@ -112,6 +112,12 @@ except:
     print("mediapipe: not installed")
 PY
 
+# Map RunPod secret to CIVITAI_TOKEN if not already set
+if [ -z "${CIVITAI_TOKEN:-}" ] && [ -n "${RUNPOD_SECRET_CivitKey:-}" ]; then
+  export CIVITAI_TOKEN="${RUNPOD_SECRET_CivitKey}"
+  echo "[config] Using RunPod CivitAI API key"
+fi
+
 # Helpers
 download() {
   local url="$1"
@@ -139,6 +145,63 @@ download() {
     curl -L --fail --retry 8 --retry-delay 2 --max-time 300 -C - -o "$out" "$url"
   else
     wget -c -O "$out" "$url"
+  fi
+}
+
+civit_download() {
+  local url="$1"
+  local out="$2"
+  mkdir -p "$(dirname "$out")"
+  if [ -f "$out" ] && [ -s "$out" ]; then
+    echo "[civitai] exists: $out"
+    return 0
+  fi
+  echo "[civitai] downloading: $out"
+  if command -v aria2c >/dev/null 2>&1; then
+    # If we have a token, get the signed redirect URL first (R2 signed URLs fail with extra headers)
+    local download_url="$url"
+    if [ -n "${CIVITAI_TOKEN:-}" ]; then
+      echo "[civitai] Getting signed download URL..."
+      download_url=$(curl -sL -I -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+        -H "Authorization: Bearer ${CIVITAI_TOKEN}" \
+        "$url" | grep -i "^location:" | tail -1 | sed 's/^location: //i' | tr -d '\r\n')
+      if [ -z "$download_url" ]; then
+        echo "[civitai] Failed to get redirect URL, using original"
+        download_url="$url"
+      fi
+    fi
+    local aria_opts=(
+      -c -x 16 -s 16 -k 1M
+      --allow-overwrite=true
+      --file-allocation=none
+      --max-tries=10
+      --retry-wait=2
+      --connect-timeout=30
+      --timeout=60
+      --max-connection-per-server=16
+      --min-split-size=1M
+      --split=16
+      --stream-piece-selector=geom
+      --optimize-concurrent-downloads=true
+      --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      -d "$(dirname "$out")" -o "$(basename "$out")"
+    )
+    aria2c "${aria_opts[@]}" "$download_url"
+  else
+    local header=()
+    if [ -n "${CIVITAI_TOKEN:-}" ]; then
+      header+=( -H "Authorization: Bearer ${CIVITAI_TOKEN}" )
+    fi
+    curl -L --fail --retry 10 --retry-delay 2 -C - \
+      -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+      "${header[@]}" \
+      -o "$out" "$url"
+  fi
+  # If we got HTML (login page), delete it so you dont think its a model
+  if command -v file >/dev/null 2>&1 && file "$out" | grep -qi "HTML"; then
+    echo "[civitai] ERROR: got HTML instead of model (token missing/invalid/gated). Removing $out"
+    rm -f "$out"
+    return 1
   fi
 }
 
@@ -256,6 +319,26 @@ echo "[models] Downloading models (fully parallel)..."
 # Krea2 Turbo — native krea-ai format, single checkpoint file
 download "https://huggingface.co/krea/Krea-2-Turbo/resolve/main/turbo.safetensors" \
   "${MODELS_DIR}/diffusion_models/krea2_turbo.safetensors" &
+
+# CivitAI LoRAs (fully parallel alongside the HF downloads above)
+civit_download "https://civitai.red/api/download/models/3104629?fileId=2984442" \
+  "${MODELS_DIR}/loras/SNOFS.safetensors" &
+
+civit_download "https://civitai.red/api/download/models/3075498?fileId=2954554" \
+  "${MODELS_DIR}/loras/NiceGirls_Ultrarealistic.safetensors" &
+
+civit_download "https://civitai.red/api/download/models/3067151?fileId=2945865" \
+  "${MODELS_DIR}/loras/Krea2_filter_bypass.safetensors" &
+
+civit_download "https://civitai.red/api/download/models/3070702?fileId=2949534" \
+  "${MODELS_DIR}/loras/Realism_engine.safetensors" &
+
+civit_download "https://civitai.red/api/download/models/3075606?fileId=2954661" \
+  "${MODELS_DIR}/loras/Lenovo_ultrareal.safetensors" &
+
+# CivitAI checkpoints
+civit_download "https://civitai.red/api/download/models/3083062?fileId=2962388" \
+  "${MODELS_DIR}/checkpoints/Mystic.safetensors" &
 
 wait
 echo "[models] Single-file downloads completed!"
