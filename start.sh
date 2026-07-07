@@ -239,6 +239,7 @@ mkdir -p \
   "${MODELS_DIR}/diffusion_models" \
   "${MODELS_DIR}/loras" \
   "${MODELS_DIR}/vae" \
+  "${MODELS_DIR}/text_encoders" \
   "${MODELS_DIR}/SeedVR2" \
   "${MODELS_DIR}/krea2_raw"
 
@@ -248,7 +249,20 @@ mkdir -p "$REPO_CACHE"
 UPDATE_NODES="${UPDATE_NODES:-0}"
 
 # Clone ALL nodes in parallel (not batches!)
+# NOTE: previously piped `git clone --progress` through `grep -v "Checking out
+# files"`. Git's progress lines are carriage-return (\r) separated, not
+# newline-separated, so grep buffers them until a real \n shows up and dumps a
+# huge wall of concatenated percentages all at once (the garbled
+# "0%...3%...100%, done" single line in your screenshot). It LOOKS frozen for
+# minutes, then "unfreezes" -- but it was progressing the whole time. Fix:
+# stop piping progress through grep, log each clone to its own file instead,
+# and print short status lines. Also add a hard timeout + one retry per repo
+# so a genuinely stalled connection fails fast instead of hanging `wait`.
 echo "[nodes] Cloning custom nodes (fully parallel)..."
+GIT_CLONE_TIMEOUT="${GIT_CLONE_TIMEOUT:-180}"
+NODE_CLONE_LOG_DIR="${PERSIST_DIR}/.clone-logs"
+mkdir -p "$NODE_CLONE_LOG_DIR"
+
 (
   cd "$REPO_CACHE"
 
@@ -267,11 +281,28 @@ echo "[nodes] Cloning custom nodes (fully parallel)..."
     (
       if [ ! -d "${name}/.git" ]; then
         echo "[nodes] cloning ${name}..."
-        GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true git \
-          -c http.extraHeader= \
-          -c credential.helper= \
-          -c core.askPass= \
-          clone --depth 1 --progress "$url" "$name" 2>&1 | grep -v "Checking out files" || true
+        log="${NODE_CLONE_LOG_DIR}/${name}.log"
+        ok=0
+        for attempt in 1 2; do
+          if GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true \
+             GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30 \
+             timeout "${GIT_CLONE_TIMEOUT}" git \
+               -c http.extraHeader= \
+               -c credential.helper= \
+               -c core.askPass= \
+               clone --depth 1 --single-branch --no-tags -q "$url" "$name" \
+               > "$log" 2>&1; then
+            ok=1
+            break
+          fi
+          echo "[nodes] ${name} attempt ${attempt} failed/timed out (see ${log}), retrying..."
+          rm -rf "${name}"
+        done
+        if [ "$ok" = "1" ]; then
+          echo "[nodes] ${name} done"
+        else
+          echo "[nodes] WARNING: ${name} failed after retries, see ${log}"
+        fi
       elif [ "$UPDATE_NODES" = "1" ]; then
         echo "[nodes] updating ${name}..."
         git -C "$name" pull --rebase 2>/dev/null || true
@@ -319,6 +350,15 @@ echo "[models] Downloading models (fully parallel)..."
 # Krea2 Turbo — native krea-ai format, single checkpoint file
 download "https://huggingface.co/krea/Krea-2-Turbo/resolve/main/turbo.safetensors" \
   "${MODELS_DIR}/diffusion_models/krea2_turbo.safetensors" &
+
+# Krea2 required text encoder (Qwen3VL-4B, fp8 repackaged for ComfyUI's CLIPLoader)
+# and VAE (qwen_image_vae, shared with Anima). Both from Comfy-Org/Krea-2, the
+# repackaged/ComfyUI-native layout — confirmed via Comfy-Org's own workflow docs.
+download "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" \
+  "${MODELS_DIR}/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" &
+
+download "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors" \
+  "${MODELS_DIR}/vae/qwen_image_vae.safetensors" &
 
 # CivitAI LoRAs (fully parallel alongside the HF downloads above)
 civit_download "https://civitai.red/api/download/models/3104629?fileId=2984442" \
