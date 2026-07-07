@@ -205,34 +205,18 @@ civit_download() {
   fi
 }
 
-# Multi-file HF repo snapshot (for repos like krea/Krea-2-Raw that ship as
-# transformer/vae/text_encoder/tokenizer subfolders instead of one file).
-# Skips re-downloading if the target dir already has content.
-# hf_transfer does real multi-connection chunked downloads (Rust-based) instead
-# of huggingface_hub's default single-threaded requests download — noticeably
-# faster for big multi-file snapshots on a fat pipe.
-pip install -q hf_transfer --break-system-packages 2>/dev/null || true
-export HF_HUB_ENABLE_HF_TRANSFER=1
+# hf_xet is the current (2026) accelerated transfer backend for HF downloads —
+# it's used automatically by a recent huggingface_hub, no env var needed to
+# turn it on. HF_XET_HIGH_PERFORMANCE=1 pushes it further (more concurrent
+# connections/higher throughput mode). The old HF_HUB_ENABLE_HF_TRANSFER var
+# is deprecated and does nothing anymore.
+pip install -q -U "huggingface_hub[hf_xet]" --break-system-packages 2>/dev/null || true
+export HF_XET_HIGH_PERFORMANCE=1
 
-hf_snapshot() {
-  local repo="$1"
-  local out_dir="$2"
-  if [ -d "$out_dir" ] && [ -n "$(ls -A "$out_dir" 2>/dev/null)" ]; then
-    echo "[hf] exists: $out_dir"
-    return 0
-  fi
-  echo "[hf] snapshot downloading: $repo -> $out_dir"
-  mkdir -p "$out_dir"
-  huggingface-cli download "$repo" --local-dir "$out_dir" --exclude "*.md" "*.pdf" "images/*" \
-    || echo "[hf] WARNING: snapshot download failed for $repo, continuing"
-}
-
-# Single-file HF download that actually gets the hf_transfer/Xet speed benefit.
-# Plain aria2c/curl hitting a "resolve/main/..." URL only ever does generic
-# HTTP range requests against whatever it gets redirected to -- it can't speak
-# Xet's chunked protocol, so hf_transfer does nothing for it. huggingface-cli
-# does speak it. Use this for anything hosted on huggingface.co; keep the
-# generic download() for everything else (CivitAI, arbitrary URLs, etc).
+# Single-file HF download via the `hf` CLI (huggingface-cli is deprecated and
+# no longer actually downloads anything — it just prints a warning and exits,
+# which is why the model files silently never showed up last run). `hf` is
+# the only client that gets the hf_xet acceleration.
 hf_download() {
   local repo="$1"
   local remote_path="$2"   # e.g. "diffusion_models/krea2_turbo_fp8_scaled.safetensors"
@@ -241,10 +225,10 @@ hf_download() {
     echo "[hf] exists: $out"
     return 0
   fi
-  echo "[hf] downloading (hf_transfer): ${repo}/${remote_path}"
+  echo "[hf] downloading: ${repo}/${remote_path}"
   local tmp_dir
   tmp_dir="$(mktemp -d)"
-  if huggingface-cli download "$repo" "$remote_path" --local-dir "$tmp_dir" >/dev/null 2>&1; then
+  if hf download "$repo" "$remote_path" --local-dir "$tmp_dir"; then
     mkdir -p "$(dirname "$out")"
     mv "${tmp_dir}/${remote_path}" "$out"
   else
@@ -271,9 +255,7 @@ mkdir -p \
   "${MODELS_DIR}/diffusion_models" \
   "${MODELS_DIR}/loras" \
   "${MODELS_DIR}/vae" \
-  "${MODELS_DIR}/text_encoders" \
-  "${MODELS_DIR}/SeedVR2" \
-  "${MODELS_DIR}/krea2_raw"
+  "${MODELS_DIR}/SeedVR2"
 
 # Cache custom nodes on persistent volume
 REPO_CACHE="${PERSIST_DIR}/_repos"
@@ -439,13 +421,21 @@ echo "[models] Downloading models (fully parallel)..."
 hf_download "Comfy-Org/Krea-2" "diffusion_models/krea2_turbo_fp8_scaled.safetensors" \
   "${MODELS_DIR}/diffusion_models/krea2_turbo_fp8_scaled.safetensors" &
 
-# Krea2 required text encoder (Qwen3VL-4B, fp8) and VAE (qwen_image_vae,
-# shared with Anima) — same repo, same reasoning, same client.
+# Krea2 required text encoder (Qwen3VL-4B, fp8) — goes in models/clip (not
+# text_encoders) since that's where this workflow's CLIPLoader looks for it.
 hf_download "Comfy-Org/Krea-2" "text_encoders/qwen3vl_4b_fp8_scaled.safetensors" \
-  "${MODELS_DIR}/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" &
+  "${MODELS_DIR}/clip/qwen3vl_4b_fp8_scaled.safetensors" &
 
+# VAE (qwen_image_vae, shared with Anima) — same repo, same client.
 hf_download "Comfy-Org/Krea-2" "vae/qwen_image_vae.safetensors" \
   "${MODELS_DIR}/vae/qwen_image_vae.safetensors" &
+
+# Krea2 Raw — Comfy-Org/Krea-2 ships this as a repackaged single-file model too
+# (diffusion_models/krea2_raw_fp8_scaled.safetensors), same folder as Turbo.
+# No multi-file diffusers snapshot needed — both Raw and Turbo load through
+# ComfyUI's standard diffusion model loader.
+hf_download "Comfy-Org/Krea-2" "diffusion_models/krea2_raw_fp8_scaled.safetensors" \
+  "${MODELS_DIR}/diffusion_models/krea2_raw_fp8_scaled.safetensors" &
 
 # CivitAI LoRAs (fully parallel alongside the HF downloads above)
 civit_download "https://civitai.red/api/download/models/3104629?fileId=2984442" \
@@ -469,15 +459,6 @@ civit_download "https://civitai.red/api/download/models/3083062?fileId=2962388" 
 
 wait
 echo "[models] Single-file downloads completed!"
-
-# Krea2 Raw — ships as a multi-file diffusers repo (transformer/vae/text_encoder/
-# tokenizer/scheduler), so it needs a full snapshot rather than one URL.
-# Note: this is the *native* krea-ai layout, not ComfyUI's split diffusion_models/
-# + text_encoders/ + vae/ format. If the workflow's UNETLoader/CLIPLoader/VAELoader
-# nodes can't read these files directly, grab the repackaged versions from
-# Comfy-Org/Krea-2 instead (krea2_turbo_fp8_scaled.safetensors, qwen3vl_4b text
-# encoder, qwen_image_vae.safetensors) — ask and I'll wire that in.
-hf_snapshot "krea/Krea-2-Raw" "${MODELS_DIR}/krea2_raw"
 
 # SeedVR2 DiT/VAE weights: numz/ComfyUI-SeedVR2_VideoUpscaler auto-downloads
 # these itself into models/SeedVR2/ the first time the node runs — nothing to
