@@ -267,7 +267,7 @@ mkdir -p \
   "${MODELS_DIR}/diffusion_models" \
   "${MODELS_DIR}/loras" \
   "${MODELS_DIR}/vae" \
-  "${MODELS_DIR}/SeedVR2"
+  "${MODELS_DIR}/SEEDVR2"
 
 # Cache custom nodes on persistent volume
 REPO_CACHE="${PERSIST_DIR}/_repos"
@@ -485,9 +485,21 @@ civit_download "https://civitai.red/api/download/models/3083062?fileId=2962388" 
 wait
 echo "[models] Single-file downloads completed!"
 
-# SeedVR2 DiT/VAE weights: numz/ComfyUI-SeedVR2_VideoUpscaler auto-downloads
-# these itself into models/SeedVR2/ the first time the node runs — nothing to
-# script here, this dir just needs to exist and be persistent (already created above).
+# SeedVR2 DiT/VAE weights — pre-pulled here instead of letting the node
+# auto-download on first run. Its built-in downloader has been observed
+# stuck at ~2.8MB/s (1.5hr+ for the 15GB 7B model) since it doesn't use Xet;
+# hf_download does. Folder must be models/SEEDVR2 (all caps) — that's the
+# exact path the node reads from, confirmed from the runtime log.
+# Swap seedvr2_ema_7b_sharp_fp16 below for seedvr2_ema_3b_fp16 (6.78GB) or
+# seedvr2_ema_7b_fp8_e4m3fn (8.24GB) if you want a lighter/faster model instead.
+hf_download "numz/SeedVR2_comfyUI" "ema_vae_fp16.safetensors" \
+  "${MODELS_DIR}/SEEDVR2/ema_vae_fp16.safetensors" &
+
+hf_download "numz/SeedVR2_comfyUI" "seedvr2_ema_7b_sharp_fp16.safetensors" \
+  "${MODELS_DIR}/SEEDVR2/seedvr2_ema_7b_sharp_fp16.safetensors" &
+
+wait
+echo "[models] SeedVR2 weights ready!"
 
 echo "[models] All model setup done!"
 
