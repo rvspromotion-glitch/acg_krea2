@@ -226,7 +226,9 @@ export HF_XET_HIGH_PERFORMANCE=1
 # Single-file HF download via the `hf` CLI (huggingface-cli is deprecated and
 # no longer actually downloads anything — it just prints a warning and exits,
 # which is why the model files silently never showed up last run). `hf` is
-# the only client that gets the hf_xet acceleration.
+# the only client that gets the hf_xet acceleration. Any file living on HF —
+# gated or public — should go through this, not aria2c/curl: it's consistently
+# faster thanks to Xet chunked transfer.
 hf_download() {
   local repo="$1"
   local remote_path="$2"   # e.g. "diffusion_models/krea2_turbo_fp8_scaled.safetensors"
@@ -353,7 +355,8 @@ tarball_fetch() {
     "ComfyUI-SeedVR2_VideoUpscaler:numz/ComfyUI-SeedVR2_VideoUpscaler:HEAD" \
     "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
     "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
-    "savezipi9:rvspromotion-glitch/savezipi9:HEAD"
+    "savezipi9:rvspromotion-glitch/savezipi9:HEAD" \
+    "RES4LYF:ClownsharkBatwing/RES4LYF:HEAD"
   do
     name="${repo%%:*}"
     rest="${repo#*:}"
@@ -446,6 +449,18 @@ hf_download "Comfy-Org/Krea-2" "vae/qwen_image_vae.safetensors" \
 # ComfyUI's standard diffusion model loader.
 hf_download "Comfy-Org/Krea-2" "diffusion_models/krea2_raw_fp8_scaled.safetensors" \
   "${MODELS_DIR}/diffusion_models/krea2_raw_fp8_scaled.safetensors" &
+
+# Krea2 Turbo LoRA (rank 64) — for the RAW + LoRA @ 0.6 dual-sampler setup.
+# Layers on top of krea2_raw_fp8_scaled.safetensors above, doesn't replace it.
+hf_download "Comfy-Org/Krea-2" "loras/krea2_turbo_lora_rank_64_bf16.safetensors" \
+  "${MODELS_DIR}/loras/krea2_turbo_lora_rank_64_bf16.safetensors" &
+
+# Wan 2.1 VAE (FP32) — swap-in replacement for qwen_image_vae in the Krea 2
+# pipeline; sharper decode, same latent format, no other graph changes needed.
+# Public repo (not gated), still routed through hf_download per your call —
+# it's the faster path for anything living on HF regardless of gating.
+hf_download "Kijai/WanVideo_comfy" "Wan2_1_VAE_fp32.safetensors" \
+  "${MODELS_DIR}/vae/Wan2_1_VAE_fp32.safetensors" &
 
 # CivitAI LoRAs (fully parallel alongside the HF downloads above)
 civit_download "https://civitai.red/api/download/models/3104629?fileId=2984442" \
