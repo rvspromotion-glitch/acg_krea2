@@ -4,7 +4,7 @@ set -euo pipefail
 STARTUP_START=$(date +%s)
 
 echo "==================================="
-echo "Starting ComfyUI Setup (KREA2 + SeedVR2)"
+echo "Starting ComfyUI Setup (KREA2)"
 echo "==================================="
 
 # Fix DNS resolution issues
@@ -267,7 +267,7 @@ mkdir -p \
   "${MODELS_DIR}/diffusion_models" \
   "${MODELS_DIR}/loras" \
   "${MODELS_DIR}/vae" \
-  "${MODELS_DIR}/SEEDVR2"
+  "${MODELS_DIR}/depthanything"
 
 # Cache custom nodes on persistent volume
 REPO_CACHE="${PERSIST_DIR}/_repos"
@@ -352,7 +352,7 @@ tarball_fetch() {
     "rgthree-comfy:rgthree/rgthree-comfy:HEAD" \
     "ComfyUI-Easy-Use:yolain/ComfyUI-Easy-Use:HEAD" \
     "ComfyUI_LayerStyle:chflame163/ComfyUI_LayerStyle:HEAD" \
-    "ComfyUI-SeedVR2_VideoUpscaler:numz/ComfyUI-SeedVR2_VideoUpscaler:HEAD" \
+    "ComfyUI-DepthAnythingV2:kijai/ComfyUI-DepthAnythingV2:HEAD" \
     "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
     "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
     "savezipi9:rvspromotion-glitch/savezipi9:HEAD" \
@@ -485,21 +485,19 @@ civit_download "https://civitai.red/api/download/models/3083062?fileId=2962388" 
 wait
 echo "[models] Single-file downloads completed!"
 
-# SeedVR2 DiT/VAE weights — pre-pulled here instead of letting the node
-# auto-download on first run. Its built-in downloader has been observed
-# stuck at ~2.8MB/s (1.5hr+ for the 15GB 7B model) since it doesn't use Xet;
-# hf_download does. Folder must be models/SEEDVR2 (all caps) — that's the
-# exact path the node reads from, confirmed from the runtime log.
-# Swap seedvr2_ema_7b_sharp_fp16 below for seedvr2_ema_3b_fp16 (6.78GB) or
-# seedvr2_ema_7b_fp8_e4m3fn (8.24GB) if you want a lighter/faster model instead.
-hf_download "numz/SeedVR2_comfyUI" "ema_vae_fp16.safetensors" \
-  "${MODELS_DIR}/SEEDVR2/ema_vae_fp16.safetensors" &
+# Krea 2 Depth ControlNet LoRA — layers on top of RAW+Turbo-LoRA for
+# depth-conditioned generation (e.g. locking pose/composition via a depth map).
+hf_download "Patil/Krea-2-depth-controlnet" "depth-control-lora.safetensors" \
+  "${MODELS_DIR}/loras/krea2_depth_control_lora.safetensors" &
 
-hf_download "numz/SeedVR2_comfyUI" "seedvr2_ema_7b_sharp_fp16.safetensors" \
-  "${MODELS_DIR}/SEEDVR2/seedvr2_ema_7b_sharp_fp16.safetensors" &
+# Depth Anything V2 (vitl fp32) — pre-pulled via hf_download so the node's
+# built-in auto-downloader never runs at inference time. Folder must be
+# models/depthanything, matching what the node's loader expects.
+hf_download "Kijai/DepthAnythingV2-safetensors" "depth_anything_v2_vitl_fp32.safetensors" \
+  "${MODELS_DIR}/depthanything/depth_anything_v2_vitl_fp32.safetensors" &
 
 wait
-echo "[models] SeedVR2 weights ready!"
+echo "[models] Depth models ready!"
 
 echo "[models] All model setup done!"
 
