@@ -404,8 +404,9 @@ for dir in "${REPO_CACHE}"/*; do
   [ -d "$dir" ] || continue
   name="$(basename "$dir")"
   case "$name" in
-    savezipi9)
-      # This repo ships as subpackages, not a single node dir
+    savezipi9|BatchnodeI9)
+      # These repos ship as subpackages (node code nested one level deeper,
+      # e.g. BatchnodeI9/I9-Batch/__init__.py), not a single node dir at repo root
       for sub in "$dir"/*; do
         [ -d "$sub" ] || continue
         ln -sfn "$sub" "${CUSTOM_NODES}/$(basename "$sub")"
