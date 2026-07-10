@@ -353,6 +353,9 @@ tarball_fetch() {
     "ComfyUI-Easy-Use:yolain/ComfyUI-Easy-Use:HEAD" \
     "ComfyUI_LayerStyle:chflame163/ComfyUI_LayerStyle:HEAD" \
     "ComfyUI-DepthAnythingV2:kijai/ComfyUI-DepthAnythingV2:HEAD" \
+    "ComfyUI-KJNodes:kijai/ComfyUI-KJNodes:HEAD" \
+    "comfyui-krea2-conditioning:huwhitememes/comfyui-krea2-conditioning:HEAD" \
+    "ComfyUI-NovaNoiser:Aloukik21/ComfyUI-NovaNoiser:HEAD" \
     "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
     "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
     "savezipi9:rvspromotion-glitch/savezipi9:HEAD" \
