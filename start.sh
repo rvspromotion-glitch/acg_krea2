@@ -356,6 +356,8 @@ tarball_fetch() {
     "ComfyUI-KJNodes:kijai/ComfyUI-KJNodes:HEAD" \
     "comfyui-krea2-conditioning:huwhitememes/comfyui-krea2-conditioning:HEAD" \
     "ComfyUI-NovaNoiser:Aloukik21/ComfyUI-NovaNoiser:HEAD" \
+    "krea-reference:kgilper/krea-reference:HEAD" \
+    "ComfyUI-Anima-PiD:sorryhyun/ComfyUI-Anima-PiD:HEAD" \
     "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
     "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
     "savezipi9:rvspromotion-glitch/savezipi9:HEAD" \
