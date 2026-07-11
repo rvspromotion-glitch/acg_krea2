@@ -358,6 +358,7 @@ tarball_fetch() {
     "ComfyUI-NovaNoiser:Aloukik21/ComfyUI-NovaNoiser:HEAD" \
     "krea-reference:kgilper/krea-reference:HEAD" \
     "ComfyUI-Anima-PiD:sorryhyun/ComfyUI-Anima-PiD:HEAD" \
+    "comfyui-krea2edit:lbouaraba/comfyui-krea2edit:HEAD" \
     "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
     "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
     "savezipi9:rvspromotion-glitch/savezipi9:HEAD" \
@@ -501,6 +502,10 @@ hf_download "Patil/Krea-2-depth-controlnet" "depth-control-lora.safetensors" \
 # models/depthanything, matching what the node's loader expects.
 hf_download "Kijai/DepthAnythingV2-safetensors" "depth_anything_v2_vitl_fp32.safetensors" \
   "${MODELS_DIR}/depthanything/depth_anything_v2_vitl_fp32.safetensors" &
+
+# Krea 2 Identity Edit LoRA — identity-preserving edit LoRA for the edit workflow.
+hf_download "conradlocke/krea2-identity-edit" "krea2_identity_edit_v1_1.safetensors" \
+  "${MODELS_DIR}/loras/krea2_identity_edit_v1_1.safetensors" &
 
 wait
 echo "[models] Depth models ready!"
