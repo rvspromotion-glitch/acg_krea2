@@ -359,6 +359,8 @@ tarball_fetch() {
     "krea-reference:kgilper/krea-reference:HEAD" \
     "ComfyUI-Anima-PiD:sorryhyun/ComfyUI-Anima-PiD:HEAD" \
     "comfyui-krea2edit:lbouaraba/comfyui-krea2edit:HEAD" \
+    "ComfyUI-Impact-Pack:ltdrdata/ComfyUI-Impact-Pack:HEAD" \
+    "comfyui-realisim-enhancor:amrnidal999-tech/comfyui-realisim-enhancor:HEAD" \
     "ComfyUI-GridSplit:workordie/ComfyUI-GridSplit:b9941964ff879487aa3e9433b174548039748453" \
     "BatchnodeI9:rvspromotion-glitch/BatchnodeI9:HEAD" \
     "savezipi9:rvspromotion-glitch/savezipi9:HEAD" \
@@ -488,6 +490,9 @@ civit_download "https://civitai.red/api/download/models/3075606?fileId=2954661" 
 # CivitAI checkpoints
 civit_download "https://civitai.red/api/download/models/3083062?fileId=2962388" \
   "${MODELS_DIR}/checkpoints/Mystic.safetensors" &
+
+civit_download "https://civitai.red/api/download/models/3107962?fileId=2996137" \
+  "${MODELS_DIR}/checkpoints/AiO_krea2_checkpoint_int8_8steps.safetensors" &
 
 wait
 echo "[models] Single-file downloads completed!"
