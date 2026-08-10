@@ -509,8 +509,8 @@ hf_download "Kijai/DepthAnythingV2-safetensors" "depth_anything_v2_vitl_fp32.saf
   "${MODELS_DIR}/depthanything/depth_anything_v2_vitl_fp32.safetensors" &
 
 # Krea 2 Identity Edit LoRA — identity-preserving edit LoRA for the edit workflow.
-hf_download "conradlocke/krea2-identity-edit" "krea2_identity_edit_v1_1.safetensors" \
-  "${MODELS_DIR}/loras/krea2_identity_edit_v1_1.safetensors" &
+hf_download "conradlocke/krea2-identity-edit" "krea2_identity_edit_v1_2.safetensors" \
+  "${MODELS_DIR}/loras/krea2_identity_edit_v1_2.safetensors" &
 
 wait
 echo "[models] Depth models ready!"
