@@ -1,0 +1,31 @@
+# Custom node packages, installed at BUILD time.   name  owner/repo  ref
+#
+# Build time, not boot time: this is the single biggest cold-start win in the
+# repo. Sixteen clones plus sixteen `pip install -r requirements.txt` runs used
+# to happen on every container start and accounted for most of the wait.
+#
+# Refs are HEAD for now. Pin them to commit shas once a build is green — these
+# are third-party repos that can change under you, and "the Sunday render broke
+# and nothing in this repo changed" is a bad Monday.
+
+# ── Required: these supply nodes the graphs in workflows/ reference ──
+BatchnodeI9                 rvspromotion-glitch/BatchnodeI9            HEAD
+ComfyUI-KJNodes             kijai/ComfyUI-KJNodes                     HEAD
+ComfyUI-Impact-Pack         ltdrdata/ComfyUI-Impact-Pack              HEAD
+comfyui-krea2edit           lbouaraba/comfyui-krea2edit               HEAD
+rgthree-comfy               rgthree/rgthree-comfy                     HEAD
+
+# ── Carried from the pod the workflows were authored on ──
+# Mostly dead weight on these six graphs, but they cost build time rather than
+# cold-start time now, so they are cheap to keep for interactive work.
+ComfyUI-Easy-Use            yolain/ComfyUI-Easy-Use                   HEAD
+ComfyUI_LayerStyle          chflame163/ComfyUI_LayerStyle             HEAD
+ComfyUI-DepthAnythingV2     kijai/ComfyUI-DepthAnythingV2             HEAD
+comfyui-krea2-conditioning  huwhitememes/comfyui-krea2-conditioning   HEAD
+ComfyUI-NovaNoiser          Aloukik21/ComfyUI-NovaNoiser              HEAD
+krea-reference              kgilper/krea-reference                    HEAD
+ComfyUI-Anima-PiD           sorryhyun/ComfyUI-Anima-PiD               HEAD
+comfyui-realisim-enhancor   amrnidal999-tech/comfyui-realisim-enhancor HEAD
+ComfyUI-GridSplit           workordie/ComfyUI-GridSplit               b9941964ff879487aa3e9433b174548039748453
+savezipi9                   rvspromotion-glitch/savezipi9             HEAD
+RES4LYF                     ClownsharkBatwing/RES4LYF                 HEAD

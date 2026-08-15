@@ -1,0 +1,12 @@
+# Only what the build actually needs. Git history and CI config have no
+# business in an image that gets pulled on every pod start.
+.git
+.github
+README.md
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.safetensors
+*.ckpt
+*.pt
