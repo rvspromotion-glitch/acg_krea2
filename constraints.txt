@@ -19,7 +19,12 @@ mediapipe==0.10.14
 # 'guidedFilter' from 'cv2.ximgproc'" and a handful of its nodes are quietly
 # broken. It is a strict superset of opencv-python-headless, and headless still,
 # so no GUI libs come along.
-opencv-contrib-python-headless
+#
+# <5 because opencv 5 declares `numpy>=2` on Python 3.9+, and numpy 2 is the one
+# thing above that the node set cannot have. Without the ceiling, pip resolves
+# opencv 5 and cv2 then fails to import against numpy 1.26 — which reads as a
+# broken opencv rather than as the numpy pin doing its job.
+opencv-contrib-python-headless<5
 
 # Kept only so PathchSageAttentionKJ (present in every graph) loads. The kernels
 # abort on Blackwell; bypass that node there rather than uninstalling this.

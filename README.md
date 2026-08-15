@@ -70,6 +70,35 @@ And the build:
 | `cache-from: type=gha` (10GB repo cap, thrashes) | registry cache on a `:buildcache` tag |
 | build on `/` (~14GB free) | Docker data-root moved to `/mnt` (~70GB) |
 
+## The opencv trap
+
+`constraints.txt` asks for `opencv-contrib-python-headless`, but a pip
+*constraint* only fixes the **version** of a package that gets installed — it
+cannot stop a differently-named distribution from arriving as someone else's
+dependency. Two of ours do exactly that:
+
+```
+ultralytics -> opencv-python
+mediapipe   -> opencv-contrib-python
+```
+
+All three unpack into the same `site-packages/cv2`, so the winner is whichever
+pip unpacked last. When `opencv-python` wins, `cv2.ximgproc.guidedFilter`
+disappears and a handful of LayerStyle nodes break — quietly, at render time.
+Note that `hasattr(cv2, "ximgproc")` still returns `True` in that state; the
+directory survives, the bindings do not. That is why the check looks for
+`guidedFilter` specifically.
+
+`install_nodes.sh` therefore ends by removing every opencv variant and
+reinstalling the contrib headless build alone, after all other pip activity. The
+`<5` ceiling in `constraints.txt` matters too: opencv 5 declares `numpy>=2`, and
+numpy 2 is the one thing this node set cannot have.
+
+pip will warn `mediapipe requires opencv-contrib-python, which is not installed`.
+That is metadata bookkeeping, not a real missing dependency — headless contrib
+provides the same `cv2` module. Do not "fix" it by reinstalling the non-headless
+build; that reintroduces the clobber.
+
 ## Editing the model list
 
 `models.txt`, one per line:
