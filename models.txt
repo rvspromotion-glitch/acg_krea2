@@ -1,0 +1,46 @@
+# Models fetched on first boot, into MODELS_DIR (default /workspace/models).
+#
+#   hf     <repo>  <path-in-repo>  <dest under MODELS_DIR>
+#   civit  <url>                   <dest under MODELS_DIR>
+#
+# Blank lines and #-comments are ignored. Destination filenames are what the
+# graphs in workflows/ reference — renaming one here without renaming it in the
+# JSON breaks the render, not the download.
+#
+# These are deliberately NOT baked into the image: ~50GB of weights on top of
+# torch does not build on a hosted GitHub runner. On a pod that costs nothing
+# after the first boot, because /workspace is a persistent volume — the fetch is
+# skip-if-present, so restart #2 onwards starts in seconds.
+#
+# Sizing: give the pod a volume of at least 100GB.
+
+# ── v1 graphs (single_photo.json, carousel.json) ──
+# Renders from the all-in-one int8 8-step checkpoint.
+civit  https://civitai.red/api/download/models/3107962?fileId=2996137  checkpoints/AiO_krea2_checkpoint_int8_8steps.safetensors
+
+# Shared text encoder / VAE / LoRAs for the krea2 samplers.
+hf     Comfy-Org/Krea-2                 text_encoders/qwen3vl_4b_fp8_scaled.safetensors  clip/qwen3vl_4b_fp8_scaled.safetensors
+hf     Kijai/WanVideo_comfy             Wan2_1_VAE_fp32.safetensors                      vae/Wan2_1_VAE_fp32.safetensors
+hf     conradlocke/krea2-identity-edit  krea2_identity_edit_v1_2.safetensors             loras/krea2_identity_edit_v1_2.safetensors
+civit  https://civitai.red/api/download/models/3075606?fileId=2954661  loras/Lenovo_ultrareal.safetensors
+
+# ── Flux2 Klein, the cleanup pass ──
+# Runs between the two krea2 samplers and takes tattoos, birthmarks and
+# piercings off. ~18GB of the total on its own.
+hf     wikeeyang/Flux2-Klein-9B-True-V3  Flux2-Klein-9B-True-V3-int8mixedrow.safetensors             diffusion_models/Flux2-Klein-9B-True-V3-int8mixedrow.safetensors
+hf     Comfy-Org/vae-text-encorder-for-flux-klein-9b  split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors  clip/qwen_3_8b_fp8mixed.safetensors
+hf     Comfy-Org/vae-text-encorder-for-flux-klein-9b  split_files/vae/flux2-vae.safetensors                     vae/flux2-vae.safetensors
+
+# ── v2/v3 graphs ──
+# The raw model plus the turbo LoRA replace the all-in-one checkpoint: the LoRA
+# layers on top of Raw at strength 0.6, it does not stand in for it, so both are
+# needed. v1 keeps using the AiO checkpoint above — the versions run side by side.
+hf     Comfy-Org/Krea-2  diffusion_models/krea2_raw_fp8_scaled.safetensors  diffusion_models/krea2_raw_fp8_scaled.safetensors
+hf     Comfy-Org/Krea-2  loras/krea2_turbo_lora_rank_64_bf16.safetensors    loras/krea2_turbo_lora_rank_64_bf16.safetensors
+civit  https://civitai.red/api/download/models/3070702?fileId=2949534  loras/Realism_engine.safetensors
+civit  https://civitai.red/api/download/models/3075498?fileId=2954554  loras/NiceGirls_Ultrarealistic.safetensors
+
+# The character LoRAs the graphs reference (Eva_klein.safetensors,
+# Eva_step-002750_identity.safetensors) are per-character and not listed here.
+# Drop them into /workspace/models/loras, or set CHAR_LORA_URL on the pod to
+# have one pulled on boot.

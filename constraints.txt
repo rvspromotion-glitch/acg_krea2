@@ -1,0 +1,26 @@
+# Hard requirements of the node set, not preferences.
+#
+# Applied as PIP_CONSTRAINT across every install in the build, so a node
+# package's own requirements.txt cannot walk them back.
+#
+# numpy 2 and mediapipe above 0.10.14 both break LayerStyle and Impact-Pack at
+# import time. Letting pip resolve these freely yields an image that builds
+# clean and then fails on the first render, which is the expensive place to
+# find out.
+numpy<2
+protobuf<5
+transformers>=4.45.0
+tokenizers
+safetensors
+mediapipe==0.10.14
+
+# contrib, not plain: LayerStyle imports guidedFilter from cv2.ximgproc, which
+# only the contrib build ships. Without it every boot logs "Cannot import name
+# 'guidedFilter' from 'cv2.ximgproc'" and a handful of its nodes are quietly
+# broken. It is a strict superset of opencv-python-headless, and headless still,
+# so no GUI libs come along.
+opencv-contrib-python-headless
+
+# Kept only so PathchSageAttentionKJ (present in every graph) loads. The kernels
+# abort on Blackwell; bypass that node there rather than uninstalling this.
+sageattention
