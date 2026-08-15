@@ -20,6 +20,16 @@ CUSTOM_NODES="${2:?custom_nodes dir required}"
 INSTALL_MANAGER="${INSTALL_MANAGER:-1}"
 JOBS="${NODE_FETCH_JOBS:-8}"
 
+# Passed explicitly to every pip call below rather than left to the environment.
+# PIP_CONSTRAINT is set in the Dockerfile and would be picked up anyway, but a
+# constraint file that silently is not in effect produces an image that builds
+# clean and has numpy 2 in it, and that only shows up on a GPU.
+CONSTRAINTS="${PIP_CONSTRAINT:-$(dirname "$LIST")/constraints.txt}"
+if [ ! -f "$CONSTRAINTS" ]; then
+  echo "[nodes] FATAL: no constraints file at ${CONSTRAINTS}" >&2
+  exit 1
+fi
+
 mkdir -p "$CUSTOM_NODES"
 
 fetch_one() {
@@ -116,17 +126,44 @@ sed -i -E 's/\r$//; /^[[:space:]]*(#|$)/d; /^[[:space:]]*-/d' "$combined"
 sort -u -o "$combined" "$combined"
 
 echo "[nodes] installing $(wc -l < "$combined") requirement lines in one pass"
-if ! pip install --no-cache-dir --prefer-binary -r "$combined"; then
+if ! pip install --no-cache-dir --prefer-binary -c "$CONSTRAINTS" -r "$combined"; then
   # One package pinning something incompatible must not cost the other fifteen
   # their dependencies, so fall back to installing them one line at a time.
   echo "[nodes] combined install failed, retrying line by line"
   while read -r line; do
     [ -n "$line" ] || continue
-    pip install --no-cache-dir --prefer-binary "$line" \
+    pip install --no-cache-dir --prefer-binary -c "$CONSTRAINTS" "$line" \
       || echo "[nodes] WARNING: could not install '${line}'"
   done < "$combined"
 fi
 rm -f "$combined"
+
+# ── opencv gets the last word ───────────────────────────────────────────────
+# constraints.txt pins opencv-contrib-python-headless, but a pip constraint only
+# fixes the *version* of a package that gets installed — it cannot stop a
+# differently-named distribution from being pulled in as someone's dependency.
+# Two of ours do exactly that:
+#
+#   ultralytics -> opencv-python
+#   mediapipe   -> opencv-contrib-python
+#
+# and node packages add more. All of them unpack into the same site-packages/cv2
+# directory, so this is not "they all work" — it is whichever pip unpacked last,
+# with the others' files partly overwritten. When opencv-python wins, ximgproc is
+# simply absent and LayerStyle loses guidedFilter on every boot.
+#
+# So this runs here, at the end of the last pip activity in the build (and in the
+# same layer, so the discarded variants never ship): remove every variant, then
+# put the contrib headless build back on its own.
+#
+# With the constraint file, NOT --no-deps. Skipping the resolver would skip the
+# numpy check with it, and opencv 5 declares numpy>=2 — you would get a cv2 that
+# cannot import against the numpy 1.26 the node set pins. The `<5` ceiling lives
+# in constraints.txt for that reason, and this install has to honour it.
+echo "[nodes] normalising opencv to the contrib headless build"
+pip uninstall -y opencv-python opencv-python-headless \
+                 opencv-contrib-python opencv-contrib-python-headless >/dev/null 2>&1 || true
+pip install --no-cache-dir --force-reinstall -c "$CONSTRAINTS" opencv-contrib-python-headless
 
 # Trim what will never be read at runtime. Worth doing in this layer rather than
 # a later one — a later RUN cannot shrink an earlier layer, it only adds a

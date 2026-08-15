@@ -59,22 +59,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # resolver, and five of them was minutes of nothing.
 COPY constraints.txt /opt/krea2/constraints.txt
 ENV PIP_CONSTRAINT=/opt/krea2/constraints.txt
-# The opencv variants all install into the same cv2/ directory, so having two of
-# them present is not "both work" — it is whichever unpacked last, with the
-# other's files half overwritten. The base ships one; drop every variant before
-# the constraints file puts the contrib build in cleanly.
+# The opencv variants all install into the same site-packages/cv2 directory, so
+# having two of them present is not "both work" — it is whichever unpacked last,
+# with the other's files half overwritten. The base image ships one, mediapipe
+# pulls opencv-contrib-python and ultralytics pulls opencv-python, so this layer
+# ends with three of them and cv2.ximgproc.guidedFilter gone. Hence the sweep at
+# both ends: drop every variant first, and put the contrib headless build back
+# last, in this same layer so the ones we do not want never ship.
+# install_nodes.sh repeats the tail end after the node requirements have had
+# their say; the full explanation lives there.
 RUN pip uninstall -y opencv-python opencv-python-headless \
-                     opencv-contrib-python opencv-contrib-python-headless 2>/dev/null || true \
- && pip install -r /opt/krea2/constraints.txt \
- && pip install \
+                     opencv-contrib-python opencv-contrib-python-headless >/dev/null 2>&1 || true; \
+    set -e; \
+    pip install -r /opt/krea2/constraints.txt; \
+    pip install \
         "huggingface_hub[hf_xet]>=0.34" hf_transfer \
         jupyterlab \
         ultralytics segment-anything sentencepiece onnxruntime-gpu \
         google-generativeai \
         accelerate diffusers einops ftfy kornia timm spandrel \
         scikit-image scipy PyWavelets piexif dill lpips soundfile \
-        matplotlib omegaconf hydra-core iopath \
- && find /usr/local/lib/python3.11 -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+        matplotlib omegaconf hydra-core iopath; \
+    pip uninstall -y opencv-python opencv-python-headless \
+                     opencv-contrib-python opencv-contrib-python-headless >/dev/null 2>&1 || true; \
+    pip install --force-reinstall opencv-contrib-python-headless; \
+    find /usr/local/lib/python3.11 -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 # ── ComfyUI ─────────────────────────────────────────────────────────────────
 RUN git clone --depth 1 --single-branch --no-tags --branch ${COMFYUI_REF} \
