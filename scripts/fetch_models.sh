@@ -129,7 +129,17 @@ started=$(date +%s)
 declare -a pids=() names=() logs=() wanted=()
 present=0
 
-while read -r kind a b c; do
+# `|| [ -n "$raw" ]` so a final line with no trailing newline is still read.
+while IFS= read -r raw || [ -n "$raw" ]; do
+  # Strip a trailing inline comment BEFORE splitting. `read` assigns the whole
+  # remainder of the line to its last variable, so "dest  # 4.4GB" would other-
+  # wise become a filename with the size note inside it — which fails as a
+  # confusing "downloaded but the node cannot find it", not as a parse error.
+  line="${raw%%[[:space:]]#*}"
+  # Deliberate word splitting on the cleaned line.
+  # shellcheck disable=SC2086
+  set -- $line
+  kind="${1:-}"; a="${2:-}"; b="${3:-}"; c="${4:-}"
   case "$kind" in ""|\#*) continue ;; esac
   case "$kind" in
     hf)    rel="$c" ;;

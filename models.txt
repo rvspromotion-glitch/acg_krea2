@@ -47,21 +47,37 @@ civit  https://civitai.red/api/download/models/3075498?fileId=2954554  loras/Nic
 
 # ── SeedVR2, the upscale / restoration pass ──
 #
-# Filenames are load-bearing twice over: the node finds these by exact name in
-# models/SEEDVR2 and validates each against a sha256 in its own registry, so a
-# renamed file reads as a missing model, not as a wrong one.
+# Every model the node can load is listed here, active or commented, because
+# anything NOT pre-fetched gets pulled by the node itself at render time — you
+# see it as "Downloading /opt/ComfyUI/models/SEEDVR2/… from huggingface.co" in
+# the middle of a job. Switching model is therefore a one-line uncomment here,
+# not a surprise download later.
 #
-# The VAE is mandatory for every variant. Two DiT models are fetched so you can
-# trade speed against quality without a second download: 3B for a fast pass, 7B
-# when the frame is the deliverable. Drop the 7B line to take ~7.7GB off the
-# first boot; drop neither and SeedVR2 adds ~11.3GB to the volume.
+# Filenames are load-bearing twice over: the node resolves these by exact name
+# in models/SEEDVR2 and checks each against a sha256 in its own registry, so a
+# renamed file reads as missing, not as wrong. (The hashes match: HF serves
+# seedvr2_ema_3b_fp16 as 2fd0e03a…, which is what the registry expects.)
 #
-# Both are fp8_e4m3fn. The fp16 builds (3B 6.3GB, 7B 15.4GB) buy little here for
-# twice the disk, and BlockSwap in the node covers cards that cannot hold the 7B
-# outright. For a low-VRAM pod the GGUF builds in AInVFX/SeedVR2_comfyUI
-# (seedvr2_ema_3b-Q4_K_M.gguf at 1.9GB, 7B Q4_K_M at 4.4GB) load through the
-# same nodes; there are also `_sharp` variants of both sizes if you want a
-# harder result.
+# Active set is ~10GB:
 hf  numz/SeedVR2_comfyUI  ema_vae_fp16.safetensors                SEEDVR2/ema_vae_fp16.safetensors
+hf  numz/SeedVR2_comfyUI  seedvr2_ema_3b_fp16.safetensors         SEEDVR2/seedvr2_ema_3b_fp16.safetensors
 hf  numz/SeedVR2_comfyUI  seedvr2_ema_3b_fp8_e4m3fn.safetensors   SEEDVR2/seedvr2_ema_3b_fp8_e4m3fn.safetensors
-hf  numz/SeedVR2_comfyUI  seedvr2_ema_7b_fp8_e4m3fn.safetensors   SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn.safetensors
+
+#   ema_vae_fp16            0.5GB  mandatory, and the node's DEFAULT_VAE
+#   seedvr2_ema_3b_fp16     6.3GB  what the graphs actually select
+#   seedvr2_ema_3b_fp8      3.2GB  the node's DEFAULT_DIT, so it is what loads
+#                                  if anyone leaves the dropdown alone
+#
+# Uncomment for more quality or less VRAM. 7B is a real step up and a real cost;
+# the Q4/Q8 GGUF builds load through the same nodes and are the low-VRAM route,
+# as is BlockSwap in the node itself. `_sharp` is a harder-looking finetune of
+# either size. Note which repo each lives in — they are not all numz.
+#
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_fp8_e4m3fn.safetensors                        SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn.safetensors                        #  7.7GB
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_fp16.safetensors                              SEEDVR2/seedvr2_ema_7b_fp16.safetensors                              # 15.4GB
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_sharp_fp8_e4m3fn.safetensors                  SEEDVR2/seedvr2_ema_7b_sharp_fp8_e4m3fn.safetensors                  #  7.7GB
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_sharp_fp16.safetensors                        SEEDVR2/seedvr2_ema_7b_sharp_fp16.safetensors                        # 15.4GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors     SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors     #  7.9GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_7b-Q4_K_M.gguf                                   SEEDVR2/seedvr2_ema_7b-Q4_K_M.gguf                                   #  4.4GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_3b-Q8_0.gguf                                     SEEDVR2/seedvr2_ema_3b-Q8_0.gguf                                     #  3.4GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_3b-Q4_K_M.gguf                                   SEEDVR2/seedvr2_ema_3b-Q4_K_M.gguf                                   #  1.9GB

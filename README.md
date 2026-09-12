@@ -8,7 +8,7 @@ persistent volume on first boot, and the entrypoint does nothing else.
 
 1. **Template** → Docker image `<dockerhub-user>/comfyui-acg-krea2:<sha>`
    (pin the sha, not `:latest` — RunPod caches by tag).
-2. **Volume** → mount at `/workspace`, **at least 100GB**. models.txt is ~61GB
+2. **Volume** → mount at `/workspace`, **at least 100GB**. models.txt is ~60GB
    and a half-written checkpoint fails every render, so leave headroom.
 3. **Ports** → `8188` (ComfyUI), `8888` (JupyterLab).
 4. **Environment variables / secrets**
@@ -19,7 +19,7 @@ persistent volume on first boot, and the entrypoint does nothing else.
    | `CIVITAI_TOKEN` or secret `CivitKey` | the four Civitai files in models.txt |
    | `CHAR_LORA_URL` | optional, pulls one character LoRA on boot |
 
-First boot downloads ~61GB and takes as long as the link allows. Every boot
+First boot downloads ~60GB and takes as long as the link allows. Every boot
 after that is a few seconds, because the volume already has the files.
 
 ### Other knobs
@@ -58,7 +58,7 @@ The old `start.sh` did nearly all of its work on **every** container start:
 | `pip install -r requirements.txt` × 16 | baked, and as **one** pip run |
 | `cp -a /opt/ComfyUI /workspace/ComfyUI` (whole tree) | gone — runs from `/opt`, four dirs symlinked to the volume |
 | 3 sequential `wait` barriers between model batches | one pool, bounded by `MODEL_FETCH_PARALLEL` |
-| HF download into the cache, then `cp` to destination | downloads into a staging dir on the same filesystem, so finishing is an instant rename — no second copy of 61GB |
+| HF download into the cache, then `cp` to destination | downloads into a staging dir on the same filesystem, so finishing is an instant rename — no second copy of 60GB |
 
 And the build:
 
@@ -72,28 +72,32 @@ And the build:
 
 ## SeedVR2 (upscale / restoration)
 
-`ComfyUI-SeedVR2_VideoUpscaler` is baked in, with weights in `models/SEEDVR2` on
-the volume:
+`ComfyUI-SeedVR2_VideoUpscaler` is baked in, with weights pre-fetched into
+`models/SEEDVR2` on the volume — ~10GB active:
 
-| file | size | when |
+| file | size | why |
 |---|---|---|
-| `ema_vae_fp16.safetensors` | 0.5GB | always — every variant needs it |
-| `seedvr2_ema_3b_fp8_e4m3fn.safetensors` | 3.2GB | fast pass |
-| `seedvr2_ema_7b_fp8_e4m3fn.safetensors` | 7.7GB | when the frame is the deliverable |
+| `ema_vae_fp16.safetensors` | 0.5GB | mandatory, and the node's `DEFAULT_VAE` |
+| `seedvr2_ema_3b_fp16.safetensors` | 6.3GB | what the graphs actually select |
+| `seedvr2_ema_3b_fp8_e4m3fn.safetensors` | 3.2GB | the node's `DEFAULT_DIT` — what loads if the dropdown is left alone |
 
-That is ~11.3GB on top of the krea2 set. Drop the 7B line from `models.txt` to
-halve it. It works on stills as well as video — batch size 1 is fine for a single
-image; temporal consistency needs at least 5 frames.
+**Anything not pre-fetched, the node downloads itself mid-job.** You see it as
+`Downloading /opt/ComfyUI/models/SEEDVR2/… from huggingface.co` partway through a
+render, which is a multi-GB stall in the worst place. So `models.txt` lists
+*every* variant the node can load — the 7B builds, the `_sharp` finetunes, the
+Q4/Q8 GGUFs — commented out with sizes. Switching model is a one-line uncomment
+there, done before the pod ever renders.
 
-Low-VRAM cards: turn on **BlockSwap** in the node, or swap in the GGUF builds
-from `AInVFX/SeedVR2_comfyUI` (3B Q4_K_M is 1.9GB, 7B Q4_K_M is 4.4GB) — they
-load through the same nodes. There are `_sharp` variants of both sizes too.
+It works on stills as well as video: batch size 1 is fine for a single image,
+temporal consistency needs at least 5 frames. Attention defaults to `sdpa`, which
+is always available, so nothing here needs flash-attention. Low-VRAM cards: turn
+on **BlockSwap** in the node, or uncomment a GGUF build (3B Q4_K_M is 1.9GB).
 
 Two things to know if you touch it:
 
-* **Filenames are validated.** The node looks these up by exact name and checks
+* **Filenames are validated.** The node resolves these by exact name and checks
   each against a sha256 in its own registry, so a renamed file reads as
-  *missing*, not as *wrong*.
+  *missing*, not as *wrong*. The hashes line up with what HF serves.
 * **It needs ComfyUI's V3 extension API** (`comfy_api.latest` → `ComfyExtension`),
   which `COMFYUI_REF=v0.32.0` exports. Moving that pin backwards breaks it with
   an import error at boot rather than a missing node.
