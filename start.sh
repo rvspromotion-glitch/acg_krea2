@@ -53,7 +53,7 @@ for pair in "models:${MODELS_DIR}" \
   ln -sfn "$target" "$link"
 done
 
-mkdir -p "${MODELS_DIR}"/{checkpoints,clip,clip_vision,diffusion_models,loras,vae,controlnet,upscale_models}
+mkdir -p "${MODELS_DIR}"/{checkpoints,clip,clip_vision,diffusion_models,loras,vae,controlnet,upscale_models,SEEDVR2}
 
 # The graphs ship in the image; drop them into the persistent user dir so they
 # show up in the workflow browser. -n, so your edits are never overwritten.

@@ -44,3 +44,24 @@ civit  https://civitai.red/api/download/models/3075498?fileId=2954554  loras/Nic
 # Eva_step-002750_identity.safetensors) are per-character and not listed here.
 # Drop them into /workspace/models/loras, or set CHAR_LORA_URL on the pod to
 # have one pulled on boot.
+
+# ── SeedVR2, the upscale / restoration pass ──
+#
+# Filenames are load-bearing twice over: the node finds these by exact name in
+# models/SEEDVR2 and validates each against a sha256 in its own registry, so a
+# renamed file reads as a missing model, not as a wrong one.
+#
+# The VAE is mandatory for every variant. Two DiT models are fetched so you can
+# trade speed against quality without a second download: 3B for a fast pass, 7B
+# when the frame is the deliverable. Drop the 7B line to take ~7.7GB off the
+# first boot; drop neither and SeedVR2 adds ~11.3GB to the volume.
+#
+# Both are fp8_e4m3fn. The fp16 builds (3B 6.3GB, 7B 15.4GB) buy little here for
+# twice the disk, and BlockSwap in the node covers cards that cannot hold the 7B
+# outright. For a low-VRAM pod the GGUF builds in AInVFX/SeedVR2_comfyUI
+# (seedvr2_ema_3b-Q4_K_M.gguf at 1.9GB, 7B Q4_K_M at 4.4GB) load through the
+# same nodes; there are also `_sharp` variants of both sizes if you want a
+# harder result.
+hf  numz/SeedVR2_comfyUI  ema_vae_fp16.safetensors                SEEDVR2/ema_vae_fp16.safetensors
+hf  numz/SeedVR2_comfyUI  seedvr2_ema_3b_fp8_e4m3fn.safetensors   SEEDVR2/seedvr2_ema_3b_fp8_e4m3fn.safetensors
+hf  numz/SeedVR2_comfyUI  seedvr2_ema_7b_fp8_e4m3fn.safetensors   SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn.safetensors
