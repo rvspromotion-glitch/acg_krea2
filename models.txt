@@ -40,6 +40,21 @@ hf     Comfy-Org/Krea-2  loras/krea2_turbo_lora_rank_64_bf16.safetensors    lora
 civit  https://civitai.red/api/download/models/3070702?fileId=2949534  loras/Realism_engine.safetensors
 civit  https://civitai.red/api/download/models/3075498?fileId=2954554  loras/NiceGirls_Ultrarealistic.safetensors
 
+# ── Alternative Krea 2 checkpoint ──
+#
+# Civitai model version 3197873, file 3079078 — the "v4 bf16" build on a Krea 2
+# base. 24.5GB on its own, which is more than a third of everything else here
+# put together, so it is the line to comment out first if the volume gets tight.
+#
+# Civitai types it as a Checkpoint but ships it as a "Diffusion Model" file, and
+# the size says the same thing: 24.5GB is bf16 of the diffusion model alone,
+# against 12.2GB for krea2_raw at fp8 — there is no room in it for the 8GB text
+# encoder and the VAE a full checkpoint would carry. So if
+# CheckpointLoaderSimple refuses it with "could not detect model type", move
+# this to diffusion_models/ and load it through UNETLoader with the qwen3vl
+# encoder and a VAE from above, exactly like krea2_raw.
+civit  https://civitai.red/api/download/models/3197873?fileId=3079078  checkpoints/fine_checkpoint_bf16_turbo.safetensors
+
 # The character LoRAs the graphs reference (Eva_klein.safetensors,
 # Eva_step-002750_identity.safetensors) are per-character and not listed here.
 # Drop them into /workspace/models/loras, or set CHAR_LORA_URL on the pod to
