@@ -30,6 +30,21 @@ rgthree-comfy               rgthree/rgthree-comfy                     HEAD
 # boot, not a missing node.
 ComfyUI-SeedVR2_VideoUpscaler  numz/ComfyUI-SeedVR2_VideoUpscaler        HEAD
 
+# ── First-party realism pass ──
+# ACG Realism Nodes: ACGRealismStack (all-in-one), ACGCameraRaw, ACGSkinDetail,
+# ACGSkinMask, ACGContactShadows, ACGPhoneColor, ACGDepthDefocus.
+#
+# Costs the build nothing: one package at the repo root, no requirements.txt,
+# and it imports only cv2, numpy and torch, all of which are already here.
+#
+# It does depend on the opencv work though. ops.py reaches for
+# cv2.ximgproc.guidedFilter, which only the contrib build ships — and it wraps
+# that in a try/except that falls back to bilateralFilter, so against a plain
+# opencv it does not fail, it just quietly produces a worse result. That is the
+# second consumer of the contrib build after LayerStyle, and the reason the
+# normalisation at the end of install_nodes.sh has to stay.
+ACG_Realism_Nodes           rvspromotion-glitch/ACG_Realism_Nodes     HEAD
+
 # ── Carried from the pod the workflows were authored on ──
 # Mostly dead weight on these six graphs, but they cost build time rather than
 # cold-start time now, so they are cheap to keep for interactive work.

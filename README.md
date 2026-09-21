@@ -42,7 +42,7 @@ prompt. These images get published.
 ## What is in the image
 
 * ComfyUI, pinned (`COMFYUI_REF`, currently `v0.32.0`)
-* the 17 custom node packages in `custom_nodes.txt`, plus ComfyUI-Manager
+* the 18 custom node packages in `custom_nodes.txt`, plus ComfyUI-Manager
 * every Python dependency, including each node package's `requirements.txt`
 * the six graphs in `workflows/`, copied into the workflow browser on boot
 
@@ -142,6 +142,11 @@ directory survives, the bindings do not. That is why the check looks for
 reinstalling the contrib headless build alone, after all other pip activity. The
 `<5` ceiling in `constraints.txt` matters too: opencv 5 declares `numpy>=2`, and
 numpy 2 is the one thing this node set cannot have.
+
+Two packages depend on this. LayerStyle breaks loudly. `ACG_Realism_Nodes`
+breaks *silently*: its `guidedFilter` call sits in a `try/except` that falls
+back to `bilateralFilter`, so against a plain opencv it still renders — just
+worse. That is the case the build-time check is really for.
 
 pip will warn `mediapipe requires opencv-contrib-python, which is not installed`.
 That is metadata bookkeeping, not a real missing dependency — headless contrib
