@@ -40,7 +40,76 @@ hf     Comfy-Org/Krea-2  loras/krea2_turbo_lora_rank_64_bf16.safetensors    lora
 civit  https://civitai.red/api/download/models/3070702?fileId=2949534  loras/Realism_engine.safetensors
 civit  https://civitai.red/api/download/models/3075498?fileId=2954554  loras/NiceGirls_Ultrarealistic.safetensors
 
+# ── Alternative Krea 2 checkpoint ──
+#
+# Civitai model version 3197873, file 3079078 — the "v4 bf16" build on a Krea 2
+# base. 24.5GB on its own, which is more than a third of everything else here
+# put together, so it is the line to comment out first if the volume gets tight.
+#
+# Civitai types it as a Checkpoint but ships it as a "Diffusion Model" file, and
+# the size says the same thing: 24.5GB is bf16 of the diffusion model alone,
+# against 12.2GB for krea2_raw at fp8 — there is no room in it for the 8GB text
+# encoder and the VAE a full checkpoint would carry. So if
+# CheckpointLoaderSimple refuses it with "could not detect model type", move
+# this to diffusion_models/ and load it through UNETLoader with the qwen3vl
+# encoder and a VAE from above, exactly like krea2_raw.
+civit  https://civitai.red/api/download/models/3197873?fileId=3079078  checkpoints/fine_checkpoint_bf16_turbo.safetensors
+
+# KRAST-bf16 V3, Krea 2 base. Civitai model version 3157041, file 3038186.
+# 23.9GB, and the same caveat as the entry above applies: Civitai types the
+# model as a Checkpoint but the file as a "Diffusion Model", and 23.9GB is the
+# diffusion model at bf16 with no text encoder or VAE inside it. If
+# CheckpointLoaderSimple will not take it, move it to diffusion_models/ and
+# drive it with UNETLoader.
+#
+# That version ships three files. The other two, if you want them:
+#   fileId=3038240  krastBf16_v3_3038240.safetensors  11.9GB  same version at
+#                   half the size — the one to use if the volume is tight
+#   fileId=2947164  KreaVaeReal.safetensors            0.5GB  the author's
+#                   preferred VAE for this checkpoint, alongside the Wan and
+#                   qwen VAEs already fetched above
+civit  https://civitai.red/api/download/models/3157041?fileId=3038186  checkpoints/krast_bf16.safetensors
+# civit  https://civitai.red/api/download/models/3157041?fileId=3038240  checkpoints/krast_bf16_half.safetensors   # 11.9GB
+# civit  https://civitai.red/api/download/models/3157041?fileId=2947164  vae/KreaVaeReal.safetensors               #  0.5GB
+
 # The character LoRAs the graphs reference (Eva_klein.safetensors,
 # Eva_step-002750_identity.safetensors) are per-character and not listed here.
 # Drop them into /workspace/models/loras, or set CHAR_LORA_URL on the pod to
 # have one pulled on boot.
+
+# ── SeedVR2, the upscale / restoration pass ──
+#
+# Every model the node can load is listed here, active or commented, because
+# anything NOT pre-fetched gets pulled by the node itself at render time — you
+# see it as "Downloading /opt/ComfyUI/models/SEEDVR2/… from huggingface.co" in
+# the middle of a job. Switching model is therefore a one-line uncomment here,
+# not a surprise download later.
+#
+# Filenames are load-bearing twice over: the node resolves these by exact name
+# in models/SEEDVR2 and checks each against a sha256 in its own registry, so a
+# renamed file reads as missing, not as wrong. (The hashes match: HF serves
+# seedvr2_ema_3b_fp16 as 2fd0e03a…, which is what the registry expects.)
+#
+# Active set is ~10GB:
+hf  numz/SeedVR2_comfyUI  ema_vae_fp16.safetensors                SEEDVR2/ema_vae_fp16.safetensors
+hf  numz/SeedVR2_comfyUI  seedvr2_ema_3b_fp16.safetensors         SEEDVR2/seedvr2_ema_3b_fp16.safetensors
+hf  numz/SeedVR2_comfyUI  seedvr2_ema_3b_fp8_e4m3fn.safetensors   SEEDVR2/seedvr2_ema_3b_fp8_e4m3fn.safetensors
+
+#   ema_vae_fp16            0.5GB  mandatory, and the node's DEFAULT_VAE
+#   seedvr2_ema_3b_fp16     6.3GB  what the graphs actually select
+#   seedvr2_ema_3b_fp8      3.2GB  the node's DEFAULT_DIT, so it is what loads
+#                                  if anyone leaves the dropdown alone
+#
+# Uncomment for more quality or less VRAM. 7B is a real step up and a real cost;
+# the Q4/Q8 GGUF builds load through the same nodes and are the low-VRAM route,
+# as is BlockSwap in the node itself. `_sharp` is a harder-looking finetune of
+# either size. Note which repo each lives in — they are not all numz.
+#
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_fp8_e4m3fn.safetensors                        SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn.safetensors                        #  7.7GB
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_fp16.safetensors                              SEEDVR2/seedvr2_ema_7b_fp16.safetensors                              # 15.4GB
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_sharp_fp8_e4m3fn.safetensors                  SEEDVR2/seedvr2_ema_7b_sharp_fp8_e4m3fn.safetensors                  #  7.7GB
+# hf  numz/SeedVR2_comfyUI   seedvr2_ema_7b_sharp_fp16.safetensors                        SEEDVR2/seedvr2_ema_7b_sharp_fp16.safetensors                        # 15.4GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors     SEEDVR2/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors     #  7.9GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_7b-Q4_K_M.gguf                                   SEEDVR2/seedvr2_ema_7b-Q4_K_M.gguf                                   #  4.4GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_3b-Q8_0.gguf                                     SEEDVR2/seedvr2_ema_3b-Q8_0.gguf                                     #  3.4GB
+# hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_3b-Q4_K_M.gguf                                   SEEDVR2/seedvr2_ema_3b-Q4_K_M.gguf                                   #  1.9GB
