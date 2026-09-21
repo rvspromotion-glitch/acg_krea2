@@ -8,19 +8,21 @@ persistent volume on first boot, and the entrypoint does nothing else.
 
 1. **Template** → Docker image `<dockerhub-user>/comfyui-acg-krea2:<sha>`
    (pin the sha, not `:latest` — RunPod caches by tag).
-2. **Volume** → mount at `/workspace`, **150GB recommended**, 100GB the floor.
-   models.txt is ~85GB and a half-written checkpoint fails every render, so
-   leave headroom for outputs and the HF cache.
+2. **Volume** → mount at `/workspace`, **200GB recommended**, 130GB the floor.
+   models.txt is ~109GB, and a half-written checkpoint fails every render, so
+   leave real headroom for outputs and the HF cache. Two entries are most of
+   that weight — the bf16 checkpoints, 24.5GB and 23.9GB — so they are what to
+   comment out first if you need the space back.
 3. **Ports** → `8188` (ComfyUI), `8888` (JupyterLab).
 4. **Environment variables / secrets**
 
    | name | needed for |
    |---|---|
    | `HF_TOKEN` or secret `HF_TOKEN` | Krea-2 is gated — the token must belong to an account that accepted the licence on the model page |
-   | `CIVITAI_TOKEN` or secret `CivitKey` | the five Civitai files in models.txt |
+   | `CIVITAI_TOKEN` or secret `CivitKey` | the six Civitai files in models.txt |
    | `CHAR_LORA_URL` | optional, pulls one character LoRA on boot |
 
-First boot downloads ~85GB and takes as long as the link allows. Every boot
+First boot downloads ~109GB and takes as long as the link allows. Every boot
 after that is a few seconds, because the volume already has the files.
 
 ### Other knobs
@@ -59,7 +61,7 @@ The old `start.sh` did nearly all of its work on **every** container start:
 | `pip install -r requirements.txt` × 16 | baked, and as **one** pip run |
 | `cp -a /opt/ComfyUI /workspace/ComfyUI` (whole tree) | gone — runs from `/opt`, four dirs symlinked to the volume |
 | 3 sequential `wait` barriers between model batches | one pool, bounded by `MODEL_FETCH_PARALLEL` |
-| HF download into the cache, then `cp` to destination | downloads into a staging dir on the same filesystem, so finishing is an instant rename — no second copy of 85GB |
+| HF download into the cache, then `cp` to destination | downloads into a staging dir on the same filesystem, so finishing is an instant rename — no second copy of 109GB |
 
 And the build:
 

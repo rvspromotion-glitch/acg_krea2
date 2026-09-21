@@ -55,6 +55,23 @@ civit  https://civitai.red/api/download/models/3075498?fileId=2954554  loras/Nic
 # encoder and a VAE from above, exactly like krea2_raw.
 civit  https://civitai.red/api/download/models/3197873?fileId=3079078  checkpoints/fine_checkpoint_bf16_turbo.safetensors
 
+# KRAST-bf16 V3, Krea 2 base. Civitai model version 3157041, file 3038186.
+# 23.9GB, and the same caveat as the entry above applies: Civitai types the
+# model as a Checkpoint but the file as a "Diffusion Model", and 23.9GB is the
+# diffusion model at bf16 with no text encoder or VAE inside it. If
+# CheckpointLoaderSimple will not take it, move it to diffusion_models/ and
+# drive it with UNETLoader.
+#
+# That version ships three files. The other two, if you want them:
+#   fileId=3038240  krastBf16_v3_3038240.safetensors  11.9GB  same version at
+#                   half the size — the one to use if the volume is tight
+#   fileId=2947164  KreaVaeReal.safetensors            0.5GB  the author's
+#                   preferred VAE for this checkpoint, alongside the Wan and
+#                   qwen VAEs already fetched above
+civit  https://civitai.red/api/download/models/3157041?fileId=3038186  checkpoints/krast_bf16.safetensors
+# civit  https://civitai.red/api/download/models/3157041?fileId=3038240  checkpoints/krast_bf16_half.safetensors   # 11.9GB
+# civit  https://civitai.red/api/download/models/3157041?fileId=2947164  vae/KreaVaeReal.safetensors               #  0.5GB
+
 # The character LoRAs the graphs reference (Eva_klein.safetensors,
 # Eva_step-002750_identity.safetensors) are per-character and not listed here.
 # Drop them into /workspace/models/loras, or set CHAR_LORA_URL on the pod to
