@@ -25,7 +25,7 @@ rgthree-comfy               rgthree/rgthree-comfy                     HEAD
 # the source. It needs models of its own — see the SEEDVR2 block in models.txt.
 #
 # It registers itself through ComfyUI's V3 extension API (comfy_api.latest
-# ComfyExtension), which our pinned COMFYUI_REF=v0.32.0 exports. If you ever
+# ComfyExtension), which our pinned COMFYUI_REF=v0.37.0 exports. If you ever
 # move that pin backwards, check that first: the failure is an import error at
 # boot, not a missing node.
 ComfyUI-SeedVR2_VideoUpscaler  numz/ComfyUI-SeedVR2_VideoUpscaler        HEAD

@@ -113,3 +113,40 @@ hf  numz/SeedVR2_comfyUI  seedvr2_ema_3b_fp8_e4m3fn.safetensors   SEEDVR2/seedvr
 # hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_7b-Q4_K_M.gguf                                   SEEDVR2/seedvr2_ema_7b-Q4_K_M.gguf                                   #  4.4GB
 # hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_3b-Q8_0.gguf                                     SEEDVR2/seedvr2_ema_3b-Q8_0.gguf                                     #  3.4GB
 # hf  AInVFX/SeedVR2_comfyUI seedvr2_ema_3b-Q4_K_M.gguf                                   SEEDVR2/seedvr2_ema_3b-Q4_K_M.gguf                                   #  1.9GB
+
+# ── Qwen-Image-2.1 (editing + text-to-image) ──
+#
+# Needs COMFYUI_REF >= v0.37.0, which the Dockerfile now pins. Everything here
+# runs on core nodes — TextEncodeQwenImage21, QwenImage21Cache, UNETLoader,
+# CLIPLoader, VAELoader — except the turbo LoRA, see below.
+#
+# The int8_convrot builds, matching the official Comfy-Org edit template. The
+# bf16 alternatives in the same repo are qwen_image_2.1_bf16 (13.3GB) and
+# qwen3vl_8b_bf16 (16.3GB); qwen3vl_8b_w4a8 (5.9GB) goes the other way if VRAM
+# is the constraint.
+#
+# NOT fetched: qwen3.5_9b_qwen_image_2.1_pe_{i2i,t2i} (8.8GB each). Those are
+# prompt enhancers for the TextGenerate node, not text encoders — an easy 8.8GB
+# to pay for by mistake, since the edit template wires one in by default. Delete
+# that node from the template, or swap it for a plain string.
+#
+# Text encoder goes in text_encoders/ per the upstream README. CLIPLoader reads
+# clip/ and text_encoders/ both, so either works; the krea2 encoders above sit in
+# clip/ for historical reasons and are left alone.
+hf  Comfy-Org/Qwen-Image-2.1  diffusion_models/qwen_image_2.1_int8_convrot.safetensors  diffusion_models/qwen_image_2.1_int8_convrot.safetensors
+hf  Comfy-Org/Qwen-Image-2.1  text_encoders/qwen3vl_8b_int8_convrot.safetensors         text_encoders/qwen3vl_8b_int8_convrot.safetensors
+hf  Comfy-Org/Qwen-Image-2.1  vae/qwen_image_2.1_vae_bf16.safetensors                   vae/qwen_image_2.1_vae_bf16.safetensors
+
+# viggle-turbo: 6 transformer passes instead of 40, no CFG, ~5x faster, and
+# upstream rates it close to the base model except on small dense text.
+#
+# v0.2.1 is the build its author says to use, and r128 is the cut their ComfyUI
+# workflows drive (r256 is what their demo Space runs, 1.3GB, uncomment below).
+#
+# Load it with the ViggleTurboLora node, NOT LoraLoaderModelOnly. It is applied
+# as a runtime side branch because merging it into int8 weights adds noise about
+# 4x the size of the update — and we run the int8 model. Pair it with
+# ViggleTurboSigmas at 6 steps. Both nodes are vendored in vendor/custom_nodes/;
+# see vendor/README.md.
+hf  Viggle/Qwen-Image-2.1-viggle-turbo  Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r128.safetensors  loras/Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r128.safetensors
+# hf  Viggle/Qwen-Image-2.1-viggle-turbo  Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r256.safetensors  loras/Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r256.safetensors   # 1.3GB
