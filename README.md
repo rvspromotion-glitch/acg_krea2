@@ -8,8 +8,8 @@ persistent volume on first boot, and the entrypoint does nothing else.
 
 1. **Template** → Docker image `<dockerhub-user>/comfyui-acg-krea2:<sha>`
    (pin the sha, not `:latest` — RunPod caches by tag).
-2. **Volume** → mount at `/workspace`, **200GB recommended**, 130GB the floor.
-   models.txt is ~109GB, and a half-written checkpoint fails every render, so
+2. **Volume** → mount at `/workspace`, **200GB recommended**, 150GB the floor.
+   models.txt is ~126GB, and a half-written checkpoint fails every render, so
    leave real headroom for outputs and the HF cache. Two entries are most of
    that weight — the bf16 checkpoints, 24.5GB and 23.9GB — so they are what to
    comment out first if you need the space back.
@@ -22,7 +22,7 @@ persistent volume on first boot, and the entrypoint does nothing else.
    | `CIVITAI_TOKEN` or secret `CivitKey` | the six Civitai files in models.txt |
    | `CHAR_LORA_URL` | optional, pulls one character LoRA on boot |
 
-First boot downloads ~109GB and takes as long as the link allows. Every boot
+First boot downloads ~126GB and takes as long as the link allows. Every boot
 after that is a few seconds, because the volume already has the files.
 
 ### Other knobs
@@ -41,8 +41,9 @@ prompt. These images get published.
 
 ## What is in the image
 
-* ComfyUI, pinned (`COMFYUI_REF`, currently `v0.32.0`)
-* the 18 custom node packages in `custom_nodes.txt`, plus ComfyUI-Manager
+* ComfyUI, pinned (`COMFYUI_REF`, currently `v0.37.0`)
+* the 18 custom node packages in `custom_nodes.txt`, plus ComfyUI-Manager,
+  plus one vendored node file (see `vendor/README.md`)
 * every Python dependency, including each node package's `requirements.txt`
 * the six graphs in `workflows/`, copied into the workflow browser on boot
 
@@ -61,7 +62,7 @@ The old `start.sh` did nearly all of its work on **every** container start:
 | `pip install -r requirements.txt` × 16 | baked, and as **one** pip run |
 | `cp -a /opt/ComfyUI /workspace/ComfyUI` (whole tree) | gone — runs from `/opt`, four dirs symlinked to the volume |
 | 3 sequential `wait` barriers between model batches | one pool, bounded by `MODEL_FETCH_PARALLEL` |
-| HF download into the cache, then `cp` to destination | downloads into a staging dir on the same filesystem, so finishing is an instant rename — no second copy of 109GB |
+| HF download into the cache, then `cp` to destination | downloads into a staging dir on the same filesystem, so finishing is an instant rename — no second copy of 126GB |
 
 And the build:
 
@@ -102,11 +103,52 @@ Two things to know if you touch it:
   each against a sha256 in its own registry, so a renamed file reads as
   *missing*, not as *wrong*. The hashes line up with what HF serves.
 * **It needs ComfyUI's V3 extension API** (`comfy_api.latest` → `ComfyExtension`),
-  which `COMFYUI_REF=v0.32.0` exports. Moving that pin backwards breaks it with
+  which `COMFYUI_REF=v0.37.0` exports. Moving that pin backwards breaks it with
   an import error at boot rather than a missing node.
 
 Note `numz/ComfyUI-SeedVR2_VideoUpscaler` is upstream. `comfyorg/comfyui_seedvr2`
 is the same codebase but runs behind it, so `custom_nodes.txt` points at numz.
+
+## Qwen-Image-2.1 (editing + text-to-image)
+
+Core nodes only — `TextEncodeQwenImage21`, `QwenImage21Cache`, `UNETLoader`,
+`CLIPLoader`, `VAELoader`. **This is why `COMFYUI_REF` is `v0.37.0`**: those two
+nodes first appear in `comfy_extras/nodes_qwen.py` at that tag. v0.36.0 and
+earlier ship only `TextEncodeQwenImageEdit`/`EditPlus`, which drive the older 20B
+Qwen-Image-Edit line, not 2.1. Do not move the pin back.
+
+| file | folder | size |
+|---|---|---|
+| `qwen_image_2.1_int8_convrot.safetensors` | `diffusion_models/` | 6.8GB |
+| `qwen3vl_8b_int8_convrot.safetensors` | `text_encoders/` | 8.7GB |
+| `qwen_image_2.1_vae_bf16.safetensors` | `vae/` | 0.6GB |
+| `Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r128.safetensors` | `loras/` | 0.6GB |
+
+Official templates: [image edit](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/image_qwen_image_2_1_image_edit.json),
+[t2i](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/image_qwen_image_2_1_t2i.json),
+[background removal](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/image_qwen_image_2_1_background_removal.json).
+
+**The prompt enhancers are deliberately not fetched.** The edit template wires a
+`TextGenerate` node to `qwen3.5_9b_qwen_image_2.1_pe_i2i` by default, and that
+file is 8.8GB. It is a prompt rewriter, not a text encoder — delete the node or
+feed the sampler a plain string instead.
+
+### viggle-turbo
+
+6 transformer passes instead of 40, no CFG, ~5x faster, and upstream rates it
+close to the base model except on small dense text. v0.2.1 is the build its
+author says to use; r128 is the cut their own ComfyUI workflows drive.
+
+Drive it with **`ViggleTurboLora`, not `LoraLoaderModelOnly`**, and
+`ViggleTurboSigmas` at 6 steps. That is not a preference: the node applies the
+LoRA as a runtime side branch, because merging it into the weights loses ~30% of
+the update on bf16 and, on int8, adds noise about **4x the size of the update** —
+and the diffusion model above is int8. It is also a diffusers-format LoRA that
+core loaders do not read the rank/alpha metadata of.
+
+Both nodes come from one 5.5KB file vendored at `vendor/custom_nodes/viggle_turbo.py`,
+because it is published on Hugging Face rather than GitHub and `install_nodes.sh`
+only speaks codeload and git. `vendor/README.md` has its sha256 and how to update.
 
 ### Why not DLSS (ComfyUI-DLSS5)
 

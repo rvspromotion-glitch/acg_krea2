@@ -26,7 +26,18 @@ FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 # two things in motion, and the collision surfaces as a traceback pointing at
 # neither. It has to be recent though — these graphs load a krea2 text encoder,
 # and CLIPLoader only learned that type well after v0.9.2.
-ARG COMFYUI_REF=v0.32.0
+#
+# v0.37.0 is the floor for Qwen-Image-2.1: TextEncodeQwenImage21 and
+# QwenImage21Cache first appear in comfy_extras/nodes_qwen.py there. v0.36.0 and
+# earlier ship only TextEncodeQwenImageEdit/EditPlus, which drive the older 20B
+# Qwen-Image-Edit line, not 2.1. Checked tag by tag rather than trusted to a
+# release note.
+#
+# Safe for what was already here: torch is unpinned in its requirements.txt, so
+# the base image's matched cu128 2.8.0 satisfies it and is not reinstalled; and
+# comfy_api.latest still exports ComfyExtension, which is what SeedVR2's V3
+# entrypoint imports.
+ARG COMFYUI_REF=v0.37.0
 ARG INSTALL_MANAGER=1
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -112,6 +123,12 @@ COPY scripts/verify_build.py /opt/krea2/verify_build.py
 RUN python3 /opt/krea2/verify_build.py
 
 # ── Everything that changes often, last, so a tweak here rebuilds nothing above
+# Vendored because it lives on Hugging Face, not GitHub, so install_nodes.sh
+# cannot fetch it — and because upstream calls its own ComfyUI port rough and
+# ships it from a mutable main. See vendor/README.md for provenance, the sha256,
+# and why the turbo LoRA does not work correctly without it on an int8 model.
+COPY vendor/custom_nodes/viggle_turbo.py /opt/ComfyUI/custom_nodes/viggle_turbo.py
+
 COPY workflows/ /opt/workflows/
 COPY models.txt /opt/krea2/models.txt
 COPY scripts/fetch_models.sh /opt/krea2/fetch_models.sh
